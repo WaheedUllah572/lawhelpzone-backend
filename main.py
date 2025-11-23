@@ -1,0 +1,44 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.websockets import WebSocket
+from routes.chat import router as chat_router
+from routes.save import router as save_router
+from routes.upload import router as upload_router
+from routes.sign import router as sign_router
+from routes.settings import router as settings_router
+from routes.generate import router as generate_router  # ✅ Added import
+from database import init_db
+import uvicorn, os
+
+os.makedirs("temp_files", exist_ok=True)
+app = FastAPI(title="LawHelpZone AI Backend")
+init_db()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.websocket("/ws/ping")
+async def ws_ping(websocket: WebSocket):
+    await websocket.accept()
+    await websocket.send_text("pong")
+    await websocket.close()
+
+# Routers
+app.include_router(chat_router, prefix="/api")
+app.include_router(save_router, prefix="/api/save")
+app.include_router(upload_router, prefix="/api/upload")
+app.include_router(sign_router, prefix="/api/sign")
+app.include_router(settings_router, prefix="/api/settings")
+app.include_router(generate_router, prefix="/api")  # ✅ Added new route include
+
+@app.get("/")
+def root():
+    return {"message": "Backend running OK on port 5050 🚀"}
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=5050, reload=True)
