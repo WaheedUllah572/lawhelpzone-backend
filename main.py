@@ -6,7 +6,7 @@ from routes.save import router as save_router
 from routes.upload import router as upload_router
 from routes.sign import router as sign_router
 from routes.settings import router as settings_router
-from routes.generate import router as generate_router  # ✅ Added import
+from routes.generate import router as generate_router
 from database import init_db
 import uvicorn, os
 
@@ -14,9 +14,15 @@ os.makedirs("temp_files", exist_ok=True)
 app = FastAPI(title="LawHelpZone AI Backend")
 init_db()
 
+# ✅ CORS Configuration (specific to your frontend)
+origins = [
+    "https://lawhelpzone-frontend-6hsi.vercel.app",
+    "http://localhost:5173",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -34,7 +40,7 @@ app.include_router(save_router, prefix="/api/save")
 app.include_router(upload_router, prefix="/api/upload")
 app.include_router(sign_router, prefix="/api/sign")
 app.include_router(settings_router, prefix="/api/settings")
-app.include_router(generate_router, prefix="/api")  # ✅ Added new route include
+app.include_router(generate_router, prefix="/api")
 
 @app.get("/")
 def root():

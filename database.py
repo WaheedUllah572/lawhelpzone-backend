@@ -4,16 +4,21 @@ from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 import os
 
+# ✅ Load Supabase connection URL
 SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL")
 if not SUPABASE_DB_URL:
     raise ValueError("❌ SUPABASE_DB_URL is missing in your .env file!")
 
-engine = create_engine(SUPABASE_DB_URL, pool_pre_ping=True)
+# ✅ Use psycopg3 dialect explicitly
+DATABASE_URL = SUPABASE_DB_URL.replace("postgresql://", "postgresql+psycopg://")
+
+# ✅ Create SQLAlchemy engine and session
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 # -----------------------------
-# Existing documents table
+# 📄 Documents Table
 # -----------------------------
 class Document(Base):
     __tablename__ = "documents"
@@ -27,9 +32,8 @@ class Document(Base):
     signature_url = Column(Text, nullable=True)
     signature_hash = Column(String(255), nullable=True)
 
-
 # -----------------------------
-# ✅ New settings table
+# ⚙️ User Settings Table
 # -----------------------------
 class UserSettings(Base):
     __tablename__ = "user_settings"
@@ -41,11 +45,13 @@ class UserSettings(Base):
     supabase_url = Column(Text, nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow)
 
-
+# -----------------------------
+# 🚀 Initialize Database
+# -----------------------------
 def init_db():
     try:
         Base.metadata.create_all(bind=engine)
-        print("✅ Supabase PostgreSQL connected and tables verified.")
+        print("✅ Supabase PostgreSQL connected successfully (psycopg3).")
     except Exception as e:
         print(f"❌ Database initialization failed: {e}")
         raise
