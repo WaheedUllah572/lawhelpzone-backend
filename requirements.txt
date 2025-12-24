@@ -6,9 +6,9 @@ openai==1.41.0
 python-dotenv==1.0.1
 aiofiles==23.2.1
 
-# 🔥 Must be EXACT to fix 'proxy' error
-httpx==0.23.3
-supabase==2.3.0
+# Stable pair for Supabase + httpx
+httpx==0.24.1
+supabase==2.3.5
 
 reportlab==4.1.0
 python-multipart==0.0.9
@@ -17,3 +17,4 @@ deep-translator==1.11.4
 psycopg==3.1.19
 PyMuPDF==1.24.10
 python-docx==1.1.2
+click==8.1.7
