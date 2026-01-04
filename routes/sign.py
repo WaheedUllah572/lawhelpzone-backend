@@ -11,6 +11,13 @@ router = APIRouter()
 # ----------------------------
 # 🧩 Supabase client setup
 # ----------------------------
+import os
+
+# --- Fix Supabase 'proxy' crash on Render ---
+for var in ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"]:
+    if var in os.environ:
+        del os.environ[var]
+
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
@@ -18,7 +25,6 @@ if not SUPABASE_URL or not SUPABASE_KEY:
     raise RuntimeError("Supabase credentials missing in environment variables.")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
 
 # ----------------------------
 # 🧾 Save signature + Regenerate Signed PDF
