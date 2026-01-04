@@ -13,8 +13,10 @@ python-dotenv==1.0.1
 aiofiles==23.2.1
 
 # --- Supabase / HTTP ---
-httpx==0.23.3          # Compatible with Supabase <= 2.3.0
-supabase==2.3.0        # Avoids 'proxy' arg bug
+supabase==2.4.6
+httpx==0.25.2
+
+
 
 # --- Document & File Handling ---
 reportlab==4.1.0
