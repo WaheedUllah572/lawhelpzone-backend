@@ -13,8 +13,9 @@ python-dotenv==1.0.1
 aiofiles==23.2.1
 
 # --- Supabase / HTTP ---
-supabase==2.4.6
-httpx==0.25.2
+supabase==1.0.3
+httpx==0.23.0
+gotrue==1.0.0
 
 
 
