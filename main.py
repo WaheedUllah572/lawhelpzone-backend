@@ -9,6 +9,18 @@ from routes.settings import router as settings_router
 from routes.generate import router as generate_router
 from database import init_db
 import uvicorn, os
+# ---- GLOBAL PATCH FOR HTTPX PROXIES CRASH ----
+import httpx
+
+_real_init = httpx.Client.__init__
+
+def _patched_init(self, *args, **kwargs):
+    kwargs.pop("proxy", None)
+    kwargs.pop("proxies", None)
+    return _real_init(self, *args, **kwargs)
+
+httpx.Client.__init__ = _patched_init
+# ---------------------------------------------
 
 os.makedirs("temp_files", exist_ok=True)
 app = FastAPI(title="LawHelpZone AI Backend")
