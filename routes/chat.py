@@ -1,3 +1,16 @@
+# ---- PATCH HTTPX PROXIES CRASH FOR OPENAI ----
+import httpx
+
+_real_init = httpx.Client.__init__
+
+def _patched_init(self, *args, **kwargs):
+    kwargs.pop("proxy", None)
+    kwargs.pop("proxies", None)
+    return _real_init(self, *args, **kwargs)
+
+httpx.Client.__init__ = _patched_init
+# ----------------------------------------------
+
 from fastapi import APIRouter, WebSocket, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -16,6 +29,7 @@ def load_law_fallback():
             return json.load(f)
     except FileNotFoundError:
         return {}
+
 LAW_FACTS = load_law_fallback()
 
 
