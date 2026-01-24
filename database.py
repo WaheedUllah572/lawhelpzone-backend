@@ -51,7 +51,7 @@ class UserSettings(Base):
 def init_db():
     try:
         Base.metadata.create_all(bind=engine)
-        print("✅ Supabase PostgreSQL connected successfully (psycopg3).")
+        print("✅ Database initialized")
     except Exception as e:
-        print(f"❌ Database initialization failed: {e}")
-        raise
+        print("⚠️ Database not ready yet, continuing startup:", e)
+
