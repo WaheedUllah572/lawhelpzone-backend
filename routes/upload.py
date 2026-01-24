@@ -1,15 +1,18 @@
 import sys
 import os
+from datetime import datetime
 
-# 🧩 FIX: prevent PyMuPDF from confusing your React folder ("webapp") as a Python module
-sys.path = [p for p in sys.path if not p.endswith("frontend") and "webapp" not in p]
+# 🧩 FIX: prevent PyMuPDF from confusing frontend folders as Python modules
+sys.path = [
+    p for p in sys.path
+    if not p.endswith("frontend") and "webapp" not in p
+]
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from openai import OpenAI
-import fitz  # PyMuPDF for PDFs
-from docx import Document as DocxReader  # for .docx
+import fitz  # PyMuPDF
+from docx import Document as DocxReader
 from database import SessionLocal, Document
-from datetime import datetime
 
 router = APIRouter()
 client = OpenAI()
@@ -17,58 +20,53 @@ client = OpenAI()
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-
-# ----------------------------
-# Extract text from file
-# ----------------------------
-def extract_text(file_path: str):
-    """Extract text content from PDF, DOCX, or TXT."""
+# -------------------------------------------------
+# Extract text from supported documents
+# -------------------------------------------------
+def extract_text(file_path: str) -> str:
     if file_path.endswith(".pdf"):
         text = ""
         with fitz.open(file_path) as pdf:
             for page in pdf:
                 text += page.get_text("text")
-        return text
+        return text.strip()
 
-    elif file_path.endswith(".docx"):
+    if file_path.endswith(".docx"):
         doc = DocxReader(file_path)
-        return "\n".join([p.text for p in doc.paragraphs])
+        return "\n".join(p.text for p in doc.paragraphs).strip()
 
-    elif file_path.endswith(".txt"):
+    if file_path.endswith(".txt"):
         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            return f.read()
+            return f.read().strip()
 
-    raise HTTPException(status_code=400, detail="Unsupported file type. Use PDF, DOCX, or TXT.")
+    raise HTTPException(
+        status_code=400,
+        detail="Unsupported file type. Use PDF, DOCX, or TXT."
+    )
 
+# -------------------------------------------------
+# AI Document Analysis
+# -------------------------------------------------
+def analyze_document(content: str) -> str:
+    if not content or len(content) < 50:
+        raise HTTPException(
+            status_code=400,
+            detail="Document appears empty or unreadable."
+        )
 
-# ----------------------------
-# AI Document Analysis (Summary + Clause Detection + Risk Rating)
-# ----------------------------
-def analyze_document(content: str):
-    """Summarize and extract legal clauses from the uploaded document."""
     prompt = f"""
-    You are an advanced Legal AI Analyst.
+You are an advanced Legal AI Analyst.
 
-    Analyze the following contract/document text and produce a detailed report including:
-    1. ### Summary — concise overview of what the document is about.
-    2. ### Breakdown of Major Legal Clauses — clearly labeled and emoji-tagged sections:
-       ⚖️ **Governing Law Clause:** ...
-       💰 **Payment Terms:** ...
-       🤝 **Confidentiality Clause:** ...
-       🚪 **Termination Clause:** ...
-       ⏱️ **Duration Clause:** ...
-       🧾 **Liability Clause:** ...
-       ✉️ **Dispute Resolution Clause:** ...
-       🧩 **Other Important Clauses (if found):** ...
-    3. ⚠️ **Missing Clauses:** List any standard clauses that are not found.
-    4. 🔍 **AI Legal Risk Assessment:**
-       - Rate each clause as 🟢 Low Risk / 🟠 Moderate Risk / 🔴 High Risk.
-       - Add a short reason for the rating.
-       - End with a one-line “Overall Document Risk Summary”.
+Analyze the following document and provide:
 
-    Document Content (truncated to 4000 chars):
-    {content[:4000]}
-    """
+1. ### Summary
+2. ### Major Legal Clauses (emoji-tagged)
+3. ⚠️ Missing Clauses
+4. 🔍 AI Legal Risk Assessment
+
+Document Content (truncated):
+{content[:4000]}
+"""
 
     try:
         response = client.chat.completions.create(
@@ -79,16 +77,18 @@ def analyze_document(content: str):
             ],
             temperature=0.3,
         )
-        return response.choices[0].message.content
+        return response.choices[0].message.content.strip()
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI analysis failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"AI analysis failed: {str(e)}"
+        )
 
-
-# ----------------------------
-# Save to Supabase DB
-# ----------------------------
-def save_to_db(title: str, content: str, user_id="guest"):
-    """Save analysis result to the Supabase PostgreSQL database."""
+# -------------------------------------------------
+# Save analysis to database
+# -------------------------------------------------
+def save_to_db(title: str, content: str, user_id: str = "guest") -> int:
     db = SessionLocal()
     try:
         doc = Document(
@@ -104,28 +104,41 @@ def save_to_db(title: str, content: str, user_id="guest"):
     finally:
         db.close()
 
-
-# ----------------------------
-# Upload and Process Route
-# ----------------------------
-@router.post("/")
+# -------------------------------------------------
+# ✅ UPLOAD ENDPOINT (NO REDIRECTS)
+# -------------------------------------------------
+@router.post("")
 async def upload_file(file: UploadFile = File(...)):
-    """Upload a legal document, extract content, analyze with AI, and store in DB."""
+    """
+    Upload a legal document, analyze with AI, and save results.
+    """
     try:
-        file_ext = os.path.splitext(file.filename)[1].lower()
-        temp_path = os.path.join(UPLOAD_DIR, f"{datetime.utcnow().timestamp()}{file_ext}")
+        ext = os.path.splitext(file.filename)[1].lower()
+        if ext not in [".pdf", ".docx", ".txt"]:
+            raise HTTPException(status_code=400, detail="Unsupported file type.")
+
+        temp_path = os.path.join(
+            UPLOAD_DIR,
+            f"{int(datetime.utcnow().timestamp())}{ext}"
+        )
+
+        contents = await file.read()
+        if not contents:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
         with open(temp_path, "wb") as f:
-            f.write(await file.read())
+            f.write(contents)
 
         text_content = extract_text(temp_path)
         ai_analysis = analyze_document(text_content)
         doc_id = save_to_db(title=file.filename, content=ai_analysis)
+
         os.remove(temp_path)
 
-        print(f"📄 File processed: {file.filename} | Saved as ID: {doc_id}")
+        print(f"✅ File analyzed: {file.filename} | ID: {doc_id}")
+
         return {
             "status": "success",
-            "message": f"File '{file.filename}' analyzed successfully",
             "doc_id": doc_id,
             "ai_summary": ai_analysis,
         }
@@ -133,4 +146,7 @@ async def upload_file(file: UploadFile = File(...)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Upload failed: {str(e)}"
+        )
