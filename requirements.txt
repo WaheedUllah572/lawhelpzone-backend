@@ -30,3 +30,6 @@ deep-translator==1.11.4
 # --- Misc Tools ---
 click==8.1.7
 requests
+
+uvicorn[standard]
+websockets
