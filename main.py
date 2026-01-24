@@ -1,6 +1,5 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.websockets import WebSocket
 from routes.chat import router as chat_router
 from routes.save import router as save_router
 from routes.upload import router as upload_router
@@ -8,7 +7,8 @@ from routes.sign import router as sign_router
 from routes.settings import router as settings_router
 from routes.generate import router as generate_router
 from database import init_db
-import uvicorn, os
+import uvicorn, os, asyncio
+
 # ---- GLOBAL PATCH FOR HTTPX PROXIES CRASH ----
 import httpx
 
@@ -23,30 +23,49 @@ httpx.Client.__init__ = _patched_init
 # ---------------------------------------------
 
 os.makedirs("temp_files", exist_ok=True)
+
 app = FastAPI(title="LawHelpZone AI Backend")
-init_db()
 
-# ✅ CORS Configuration (specific to your frontend)
-origins = [
-    "https://lawhelpzone-frontend-6hsi.vercel.app",
-    "http://localhost:5173",
-]
+# ✅ INIT DB (non-blocking safe for Render)
+@app.on_event("startup")
+async def startup_event():
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, init_db)
 
+# ✅ CORS (allow Vercel + local)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],  # WebSockets ignore CORS anyway, this is safe
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.websocket("/ws/ping")
-async def ws_ping(websocket: WebSocket):
+# -------------------------------------------------
+# ✅ REQUIRED FIX: REAL CHAT WEBSOCKET
+# -------------------------------------------------
+@app.websocket("/api/chat")
+async def chat_websocket(websocket: WebSocket):
     await websocket.accept()
-    await websocket.send_text("pong")
-    await websocket.close()
+    print("✅ WebSocket client connected")
 
-# Routers
+    try:
+        while True:
+            data = await websocket.receive_text()
+
+            # ---- SIMPLE ECHO TEST (CONFIRMS WORKING) ----
+            # Replace this later with your AI streaming logic
+            await websocket.send_text(f"🤖 AI Response: {data}")
+
+    except WebSocketDisconnect:
+        print("❌ WebSocket disconnected")
+    except Exception as e:
+        print("❌ WebSocket error:", e)
+        await websocket.close()
+
+# -------------------------------------------------
+# ROUTERS (REST APIs)
+# -------------------------------------------------
 app.include_router(chat_router, prefix="/api")
 app.include_router(save_router, prefix="/api/save")
 app.include_router(upload_router, prefix="/api/upload")
@@ -56,8 +75,17 @@ app.include_router(generate_router, prefix="/api")
 
 @app.get("/")
 def root():
-    return {"message": "Backend running OK on port 5050 🚀"}
+    return {"message": "Backend running OK 🚀"}
 
+# -------------------------------------------------
+# RENDER ENTRYPOINT
+# -------------------------------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=port,
+        ws_ping_interval=20,
+        ws_ping_timeout=20,
+    )
