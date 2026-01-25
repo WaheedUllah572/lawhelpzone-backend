@@ -8,18 +8,16 @@ from routes.settings import router as settings_router
 from routes.generate import router as generate_router
 from database import init_db
 import uvicorn, os, asyncio
-
-# ---- GLOBAL PATCH FOR HTTPX PROXIES CRASH ----
 import httpx
+
+# ---- PATCH HTTPX ONCE ----
 _real_init = httpx.Client.__init__
 def _patched_init(self, *args, **kwargs):
     kwargs.pop("proxy", None)
     kwargs.pop("proxies", None)
     return _real_init(self, *args, **kwargs)
 httpx.Client.__init__ = _patched_init
-# ---------------------------------------------
-
-os.makedirs("temp_files", exist_ok=True)
+# --------------------------
 
 app = FastAPI(title="LawHelpZone AI Backend")
 
@@ -36,7 +34,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ROUTERS
 app.include_router(chat_router, prefix="/api")
 app.include_router(save_router, prefix="/api/save")
 app.include_router(upload_router, prefix="/api/upload")
@@ -50,10 +47,4 @@ def root():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=port,
-        ws_ping_interval=20,
-        ws_ping_timeout=20,
-    )
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
