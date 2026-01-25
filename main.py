@@ -1,3 +1,9 @@
+import os
+
+# 🔥 REMOVE RENDER PROXY VARS BEFORE ANY IMPORTS
+for k in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
+    os.environ.pop(k, None)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routes.chat import router as chat_router
@@ -7,19 +13,8 @@ from routes.sign import router as sign_router
 from routes.settings import router as settings_router
 from routes.generate import router as generate_router
 from database import init_db
-import uvicorn, os, asyncio
-
-# ---- GLOBAL PATCH FOR HTTPX PROXIES CRASH ----
-import httpx
-_real_init = httpx.Client.__init__
-def _patched_init(self, *args, **kwargs):
-    kwargs.pop("proxy", None)
-    kwargs.pop("proxies", None)
-    return _real_init(self, *args, **kwargs)
-httpx.Client.__init__ = _patched_init
-# ---------------------------------------------
-
-os.makedirs("temp_files", exist_ok=True)
+import uvicorn
+import asyncio
 
 app = FastAPI(title="LawHelpZone AI Backend")
 
@@ -36,7 +31,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ROUTERS
 app.include_router(chat_router, prefix="/api")
 app.include_router(save_router, prefix="/api/save")
 app.include_router(upload_router, prefix="/api/upload")
@@ -57,5 +51,3 @@ if __name__ == "__main__":
         ws_ping_interval=20,
         ws_ping_timeout=20,
     )
-
-
