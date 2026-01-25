@@ -1,26 +1,40 @@
+import os
 import asyncio
 from fastapi import APIRouter, WebSocket
-from openai_client import get_openai_client
+from dotenv import load_dotenv
+from openai import OpenAI
 
+load_dotenv()
 router = APIRouter()
 sessions = {}
+
+# ✅ Lazy, proxy-safe OpenAI client (NO global init)
+def get_openai_client():
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY is not set")
+    return OpenAI(api_key=api_key)
 
 @router.websocket("/chat")
 async def chat_socket(ws: WebSocket):
     await ws.accept()
+
+    # Create OpenAI client ONLY after WebSocket connects
     client = get_openai_client()
     sid = id(ws)
 
     sessions[sid] = {
-        "messages": [{
-            "role": "system",
-            "content": (
-                "You are LawHelpZone AI, a legal assistant. "
-                "Answer legal questions only. "
-                "End every answer with: "
-                "'⚖️ This information is AI-generated and not legal advice.'"
-            )
-        }]
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are LawHelpZone AI, a professional legal assistant. "
+                    "Answer legal questions only. "
+                    "Always end your response with: "
+                    "'⚖️ This information is AI-generated and not legal advice.'"
+                ),
+            }
+        ]
     }
 
     try:
@@ -34,7 +48,9 @@ async def chat_socket(ws: WebSocket):
             if not msg.strip():
                 continue
 
-            sessions[sid]["messages"].append({"role": "user", "content": msg})
+            sessions[sid]["messages"].append(
+                {"role": "user", "content": msg}
+            )
 
             try:
                 res = client.chat.completions.create(
@@ -46,7 +62,10 @@ async def chat_socket(ws: WebSocket):
             except Exception:
                 reply = "⚖️ Service temporarily unavailable."
 
-            sessions[sid]["messages"].append({"role": "assistant", "content": reply})
+            sessions[sid]["messages"].append(
+                {"role": "assistant", "content": reply}
+            )
+
             await ws.send_text(reply)
 
     finally:
