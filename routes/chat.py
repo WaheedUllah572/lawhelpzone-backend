@@ -10,8 +10,8 @@ router = APIRouter()
 
 sessions = {}
 
+# ✅ LAZY OpenAI init (SAFE)
 def get_openai_client():
-    # ✅ LAZY INIT — proxies already removed by main.py
     return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def load_law_fallback():
@@ -36,8 +36,7 @@ async def chat_socket(ws: WebSocket):
                 "You are LawHelpZone AI, a professional legal assistant. "
                 "Answer legal questions only and always add a disclaimer."
             )
-        }],
-        "last_jurisdiction": "General",
+        }]
     }
 
     try:

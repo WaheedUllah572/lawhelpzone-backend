@@ -7,10 +7,13 @@ from docx import Document as DocxReader
 from database import SessionLocal, Document
 
 router = APIRouter()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+# ✅ LAZY OpenAI init (CRITICAL FIX)
+def get_openai_client():
+    return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def extract_text(path: str) -> str:
     if path.endswith(".pdf"):
@@ -31,12 +34,14 @@ def analyze(text: str) -> str:
     if len(text) < 50:
         raise HTTPException(400, "Document too short")
 
+    client = get_openai_client()
+
     res = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": text[:4000]}],
         temperature=0.3,
     )
-    return res.choices[0].message.content
+    return res.choices[0].message.content.strip()
 
 def save(title: str, content: str) -> int:
     db = SessionLocal()
@@ -52,7 +57,10 @@ def save(title: str, content: str) -> int:
 @router.post("/")
 async def upload(file: UploadFile = File(...)):
     ext = os.path.splitext(file.filename)[1].lower()
-    path = os.path.join(UPLOAD_DIR, f"{int(datetime.utcnow().timestamp())}{ext}")
+    path = os.path.join(
+        UPLOAD_DIR,
+        f"{int(datetime.utcnow().timestamp())}{ext}"
+    )
 
     data = await file.read()
     if not data:
@@ -65,7 +73,10 @@ async def upload(file: UploadFile = File(...)):
         text = extract_text(path)
         analysis = analyze(text)
         doc_id = save(file.filename, analysis)
-        return {"doc_id": doc_id, "ai_summary": analysis}
+        return {
+            "doc_id": doc_id,
+            "ai_summary": analysis
+        }
     finally:
         if os.path.exists(path):
             os.remove(path)
