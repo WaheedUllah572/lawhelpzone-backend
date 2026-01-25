@@ -1,25 +1,22 @@
 import os
 
-# 🔥 REMOVE RENDER PROXY VARS BEFORE ANY IMPORTS
-for k in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
+# 🔥 MUST RUN BEFORE ANY OTHER IMPORT
+for k in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy"):
     os.environ.pop(k, None)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routes.chat import router as chat_router
-from routes.save import router as save_router
 from routes.upload import router as upload_router
-from routes.sign import router as sign_router
-from routes.settings import router as settings_router
 from routes.generate import router as generate_router
 from database import init_db
-import uvicorn
 import asyncio
+import uvicorn
 
 app = FastAPI(title="LawHelpZone AI Backend")
 
 @app.on_event("startup")
-async def startup_event():
+async def startup():
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, init_db)
 
@@ -32,22 +29,18 @@ app.add_middleware(
 )
 
 app.include_router(chat_router, prefix="/api")
-app.include_router(save_router, prefix="/api/save")
 app.include_router(upload_router, prefix="/api/upload")
-app.include_router(sign_router, prefix="/api/sign")
-app.include_router(settings_router, prefix="/api/settings")
 app.include_router(generate_router, prefix="/api")
 
 @app.get("/")
-def root():
-    return {"message": "Backend running OK 🚀"}
+def health():
+    return {"status": "ok"}
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=port,
+        port=int(os.getenv("PORT", 10000)),
         ws_ping_interval=20,
         ws_ping_timeout=20,
     )
