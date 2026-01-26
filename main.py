@@ -20,6 +20,7 @@ async def startup():
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, init_db)
 
+# ✅ CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -28,8 +29,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ✅ ROUTES (FIXED)
 app.include_router(chat_router, prefix="/api")
-app.include_router(upload.router, prefix="/api/upload")
+app.include_router(upload_router, prefix="/api/upload")   # 🔥 FIXED NAME
 app.include_router(generate_router, prefix="/api")
 
 @app.get("/")

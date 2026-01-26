@@ -1,6 +1,6 @@
 import os
 import asyncio
-from fastapi import APIRouter, WebSocket
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -8,7 +8,6 @@ load_dotenv()
 router = APIRouter()
 sessions = {}
 
-# ✅ Lazy, proxy-safe OpenAI client (NO global init)
 def get_openai_client():
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
@@ -19,10 +18,14 @@ def get_openai_client():
 async def chat_socket(ws: WebSocket):
     await ws.accept()
 
-    # Create OpenAI client ONLY after WebSocket connects
-    client = get_openai_client()
-    sid = id(ws)
+    try:
+        client = get_openai_client()
+    except Exception:
+        await ws.send_text("⚖️ AI service not configured.")
+        await ws.close()
+        return
 
+    sid = id(ws)
     sessions[sid] = {
         "messages": [
             {
@@ -48,9 +51,7 @@ async def chat_socket(ws: WebSocket):
             if not msg.strip():
                 continue
 
-            sessions[sid]["messages"].append(
-                {"role": "user", "content": msg}
-            )
+            sessions[sid]["messages"].append({"role": "user", "content": msg})
 
             try:
                 res = client.chat.completions.create(
@@ -62,12 +63,10 @@ async def chat_socket(ws: WebSocket):
             except Exception:
                 reply = "⚖️ Service temporarily unavailable."
 
-            sessions[sid]["messages"].append(
-                {"role": "assistant", "content": reply}
-            )
-
+            sessions[sid]["messages"].append({"role": "assistant", "content": reply})
             await ws.send_text(reply)
 
+    except WebSocketDisconnect:
+        pass
     finally:
         sessions.pop(sid, None)
-        await ws.close()
