@@ -29,7 +29,7 @@ app.add_middleware(
 )
 
 app.include_router(chat_router, prefix="/api")
-app.include_router(upload_router, prefix="/api/upload")
+app.include_router(upload.router, prefix="/api/upload")
 app.include_router(generate_router, prefix="/api")
 
 @app.get("/")
