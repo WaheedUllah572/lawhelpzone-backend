@@ -1,26 +1,34 @@
 import os
 from datetime import datetime
 from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 from openai import OpenAI
 import fitz
 from docx import Document as DocxReader
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
 from database import SessionLocal, Document
 
 load_dotenv()
 router = APIRouter()
 
 UPLOAD_DIR = "uploads"
+PDF_DIR = "generated_pdfs"
+
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(PDF_DIR, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt"}
 MAX_FILE_SIZE = 10 * 1024 * 1024
+
 
 def get_openai_client():
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY not configured")
     return OpenAI(api_key=api_key)
+
 
 def extract_text(path: str) -> str:
     if path.endswith(".pdf"):
@@ -33,7 +41,9 @@ def extract_text(path: str) -> str:
             return f.read()
     raise HTTPException(400, "Unsupported file type")
 
-@router.post("/")  # 🔥 FIXED
+
+# ------------------ UPLOAD & ANALYZE ------------------
+@router.post("/")
 async def upload(file: UploadFile = File(...)):
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
@@ -77,3 +87,61 @@ async def upload(file: UploadFile = File(...)):
     finally:
         if os.path.exists(path):
             os.remove(path)
+
+
+# ------------------ LIST DOCUMENTS ------------------
+@router.get("/list")
+def list_documents(user_id: str):
+    db = SessionLocal()
+    docs = db.query(Document).all()
+    db.close()
+
+    return {
+        "documents": [
+            {"id": d.id, "title": d.title, "created_at": d.created_at}
+            for d in docs
+        ]
+    }
+
+
+# ------------------ DELETE DOCUMENT ------------------
+@router.delete("/delete/{doc_id}")
+def delete_document(doc_id: int):
+    db = SessionLocal()
+    doc = db.query(Document).filter(Document.id == doc_id).first()
+    if not doc:
+        db.close()
+        raise HTTPException(404, "Document not found")
+
+    db.delete(doc)
+    db.commit()
+    db.close()
+
+    return {"message": "Deleted"}
+
+
+# ------------------ GENERATE & DOWNLOAD PDF ------------------
+@router.get("/pdf/{doc_id}")
+def download_pdf(doc_id: int):
+    db = SessionLocal()
+    doc = db.query(Document).filter(Document.id == doc_id).first()
+    db.close()
+
+    if not doc:
+        raise HTTPException(404, "Document not found")
+
+    pdf_path = os.path.join(PDF_DIR, f"doc_{doc_id}.pdf")
+
+    # Generate PDF if not exists
+    if not os.path.exists(pdf_path):
+        c = canvas.Canvas(pdf_path, pagesize=letter)
+        text = c.beginText(40, 750)
+        text.setFont("Helvetica", 10)
+
+        for line in doc.content.split("\n"):
+            text.textLine(line)
+
+        c.drawText(text)
+        c.save()
+
+    return FileResponse(pdf_path, media_type="application/pdf", filename=f"{doc.title}.pdf")
